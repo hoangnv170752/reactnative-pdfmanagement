@@ -36,6 +36,9 @@ allprojects {
 
         google()
         mavenCentral()
-        maven { url 'https://www.jitpack.io' }
+        maven { 
+            url 'https://www.jitpack.io' 
+            url 'https://customers.pspdfkit.com/maven/'
+        }
     }
 }

@@ -6,6 +6,8 @@ import React, {useState} from 'react';
 import Pdf from 'react-native-pdf';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import DocumentPicker, { DocumentPickerResponse } from 'react-native-document-picker';
+import PdfRendererView from 'react-native-pdf-renderer';
+import * as FileSystem from 'expo-file-system';
 
 const styles = StyleSheet.create({
   root: {
@@ -46,6 +48,16 @@ export default function Details({ navigation, route }: StackProps) {
   const [pdfUri, setPdfUri] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [toggle, setToggle] = useState(true);
+  const [source, setSource] = useState<string>();
+  const [downloading, setDownloading] = useState(false);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [singlePage, setSinglePage] = useState(false);
+
+  const PDF_URL =
+  'https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11final-fltpln.pdf'; // 618 pages
+// const PDF_URL = 'https://www.africau.edu/images/default/sample.pdf'; // 2 pages
 
   const checkPermissions = async (): Promise<boolean> => {
     try {
@@ -93,29 +105,104 @@ export default function Details({ navigation, route }: StackProps) {
       setLoading(false);
     }
   };
+  const downloadWithExpoFileSystem = React.useCallback(async () => {
+    try {
+      setDownloading(true);
+      const response = await FileSystem.downloadAsync(
+        PDF_URL,
+        FileSystem.documentDirectory + 'file.pdf',
+      );
+      setSource(response.uri);
+    } catch (err) {
+      console.warn(err);
+    } finally {
+      setDownloading(false);
+    }
+  }, []);
+
+  // const downloadWithBlobUtil = useCallback(async () => {
+  //   try {
+  //     setDownloading(true);
+  //     /**
+  //      * Download the PDF file with any other library, like  "expo-file-system", "rn-fetch-blob" or "react-native-blob-util"
+  //      */
+  //     const dirs = ReactNativeBlobUtil.fs.dirs;
+  //     const response = await ReactNativeBlobUtil.config({
+  //       path: dirs.DocumentDir + '/file.pdf',
+  //     }).fetch('GET', PDF_URL);
+  //     /*
+  //      * Then, set the local file URI to state and pass to the PdfRendererView source prop.
+  //      */
+  //     setSource(response.path());
+  //   } catch (err) {
+  //     console.warn(err);
+  //   } finally {
+  //     setDownloading(false);
+  //   }
+  // }, []);
+
+  React.useEffect(() => {
+    downloadWithExpoFileSystem();
+    // downloadWithBlobUtil();
+  }, [downloadWithExpoFileSystem]);
+
+  const renderPdfView = () => {
+    if (downloading) {
+      return <Text>Downloading...</Text>;
+    }
+
+    if (!toggle) {
+      return <Text>Unmounted</Text>;
+    }
+
+    return (
+      <>
+        <Button
+          title="Single Page"
+          onPress={() => setSinglePage(prev => !prev)}
+        />
+        <PdfRendererView
+          style={{backgroundColor: 'white'}}
+          source={source}
+          distanceBetweenPages={16}
+          maxZoom={5}
+          singlePage={singlePage}
+          onPageChange={(current, total) => {
+            console.log('onPageChange', {current, total});
+            setCurrentPage(current);
+            setTotalPages(total);
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+          }}>
+          <Text
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.5)',
+              color: 'black',
+              padding: 4,
+              borderRadius: 4,
+            }}>
+            {currentPage + 1}/{totalPages}
+          </Text>
+        </View>
+      </>
+    );
+  };
 
   return (
     <View style={styles.root}>
-      <Button title="Pick PDF" onPress={pickDocument} />
+      {/* <Button title="Pick PDF" onPress={pickDocument} /> */}
+      <Button title="Mount/Unmount" onPress={() => setToggle(prev => !prev)} />
+
       {loading && <ActivityIndicator size="large" color="#0000ff" />}
-      {pdfUri && (
-        <Pdf
-          source={{ uri: pdfUri, cache: true }}
-          onLoadComplete={(numberOfPages: number, filePath: string) => {
-            console.log(`number of pages: ${numberOfPages}`);
-          }}
-          onPageChanged={(page: number, numberOfPages: number) => {
-            console.log(`current page: ${page}`);
-          }}
-          onError={(error: any) => {
-            console.log(error);
-          }}
-          onPressLink={(uri: string) => {
-            console.log(`Link pressed: ${uri}`);
-          }}
-          style={styles.pdf}
-        />
-      )}
+      {renderPdfView()}
+
       {permissionGranted === false && (
         <Text style={styles.permissionText}>Storage permission is required to pick a file.</Text>
       )}
